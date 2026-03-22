@@ -25,6 +25,7 @@ dev = [
     "pytest-asyncio>=0.24",
     "pre-commit>=4.0",
     "mypy>=1.13",
+    "types-PyYAML>=6.0",
 ]
 
 # ── ruff ──────────────────────────────────────────
@@ -81,4 +82,4 @@ markers = [
 python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = false  # 점진적 적용 — PR03 이후 true
+disallow_untyped_defs = true
