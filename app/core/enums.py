@@ -68,3 +68,27 @@ class JobTaskType(StrEnum):
     TEST = "TEST"
     REVIEW = "REVIEW"
     MERGE = "MERGE"
+
+
+class AgentType(StrEnum):
+    """AI agent backend that executes a task phase."""
+
+    CLAUDE = "CLAUDE"
+    CODEX = "CODEX"
+    GEMINI = "GEMINI"
+
+
+class OrchestrationMode(StrEnum):
+    """How agents are assigned to task phases.
+
+    * SINGLE     - one agent (Claude) handles every phase.
+    * PARALLEL   - phases run concurrently with dedicated agents for throughput.
+    * MULTI_MODEL - each phase uses the agent best suited for the work.
+
+    stub v1: the worker does not yet execute real agents; these modes only
+    affect which agent names appear in ``plan/agent_assignments.yaml``.
+    """
+
+    SINGLE = "single"
+    PARALLEL = "parallel"
+    MULTI_MODEL = "multi_model"

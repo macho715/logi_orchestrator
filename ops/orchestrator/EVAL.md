@@ -60,7 +60,7 @@
 ### 3. 현재 artifact 기대치
 | 영역 | 파일 |
 |---|---|
-| plan | `PLAN.md`, `TASKS.yaml`, `RISKS.md`, `TESTS.md` |
+| plan | `PLAN.md`, `TASKS.yaml`, `RISKS.md`, `TESTS.md`, `agent_assignments.yaml` |
 | codex | `patch_A.diff`, `patch_B.diff`, `impl_A_notes.md`, `impl_B_notes.md` |
 | tests | `test_results.json`, `smoke_report.md` |
 | review | `review_summary.md`, `merge_verdict.json` |

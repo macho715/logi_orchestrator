@@ -128,6 +128,21 @@
 
 ## 7. 병렬 실행 정책
 
+### 오케스트레이션 모드
+
+`/project.start` 의 `mode` 파라미터로 에이전트 배치 패턴을 선택한다.
+
+| mode | focus | 에이전트 배치 |
+|---|---|---|
+| `single` | 단순성 | 모든 phase를 Claude 단독 처리 |
+| `parallel` | 처리량 | Plan/Review=Claude, Exec/Test=Codex 병렬 |
+| `multi_model` | 품질 시너지 | Plan=Claude, Exec/Test=Codex, Review=Gemini |
+
+`default` 또는 미지원 값은 `single`로 매핑된다.
+
+> stub v1: 에이전트 배치는 `plan/agent_assignments.yaml` artifact에 기록되나,
+> 실제 Claude/Codex/Gemini backend 실행은 아직 연결되지 않았다.
+
 ### 기본 슬롯
 
 - Claude Lead: 1

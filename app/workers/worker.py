@@ -5,13 +5,16 @@ import contextlib
 from datetime import datetime
 from pathlib import Path
 
-from app.core.enums import JobEvent, JobState, JobTaskType
+import yaml
+
+from app.core.enums import JobEvent, JobState, JobTaskType, OrchestrationMode
 from app.infra.filesystem import write_json, write_text
 from app.infra.git_worktree import GitWorktreeManager
 from app.infra.storage import FileJobStore
 from app.schemas.job import AuditEvent, JobRecord, JobTask
 from app.services.audit import AuditService
 from app.services.state_machine import transition
+from app.workers.agent_resolver import resolve_assignments
 from app.workers.queue import queue_service
 
 
@@ -94,9 +97,18 @@ class QueueWorker:
         run_dir = Path(job.run_dir)
         plan_dir = run_dir / "plan"
 
+        # Resolve agent assignments for the chosen orchestration mode
+        try:
+            orch_mode = OrchestrationMode(job.orchestration_mode)
+        except ValueError:
+            orch_mode = OrchestrationMode.SINGLE
+        assignments = resolve_assignments(orch_mode)
+        job.agent_assignments = assignments
+        self.store.save(job)
+
         plan_path = write_text(
             plan_dir / "PLAN.md",
-            f"# PLAN\n\n- repo: {job.repo}\n- goal: {job.goal}\n- ac: {job.acceptance_criteria}\n- mode: {job.mode}\n",
+            f"# PLAN\n\n- repo: {job.repo}\n- goal: {job.goal}\n- ac: {job.acceptance_criteria}\n- mode: {job.mode}\n- orchestration: {orch_mode.value}\n",
         )
         tasks_path = write_text(
             plan_dir / "TASKS.yaml",
@@ -111,7 +123,17 @@ class QueueWorker:
             "# TESTS\n\n- lint\n- unit\n- smoke\n",
         )
 
-        for artifact in [plan_path, tasks_path, risks_path, tests_path]:
+        # Agent assignment artifact
+        assignment_data = {
+            "orchestration_mode": orch_mode.value,
+            "assignments": [{"phase": a.phase.value, "agent": a.agent.value, "role": a.role} for a in assignments],
+        }
+        assign_path = write_text(
+            plan_dir / "agent_assignments.yaml",
+            yaml.dump(assignment_data, default_flow_style=False, allow_unicode=True, sort_keys=False),
+        )
+
+        for artifact in [plan_path, tasks_path, risks_path, tests_path, assign_path]:
             job = self._add_artifact(job, artifact)
 
         job = self._transition(job, JobEvent.PLAN_DONE.value)

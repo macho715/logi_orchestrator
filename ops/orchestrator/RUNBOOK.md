@@ -92,6 +92,8 @@ curl -X POST http://127.0.0.1:8000/webhooks/telegram \
   }'
 ```
 
+`mode`에 `single`, `parallel`, `multi_model`을 지정할 수 있다. `default` 또는 미지원 값은 `single`로 매핑된다.
+
 예상 흐름:
 - 응답: `job created`
 - `JOB-0001` 생성
@@ -155,6 +157,7 @@ RECEIVED
 - `ops/orchestrator/runs/JOB-0001/plan/TASKS.yaml`
 - `ops/orchestrator/runs/JOB-0001/plan/RISKS.md`
 - `ops/orchestrator/runs/JOB-0001/plan/TESTS.md`
+- `ops/orchestrator/runs/JOB-0001/plan/agent_assignments.yaml`
 
 ### execute/test/review 확인
 - `codex/patch_A.diff`
