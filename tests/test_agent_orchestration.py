@@ -35,7 +35,7 @@ def _phases(assignments: list[AgentAssignment]) -> set[str]:
 def test_resolve_single_mode_all_claude() -> None:
     assignments = resolve_assignments(OrchestrationMode.SINGLE)
     assert len(assignments) == 5
-    assert _phases(assignments) == {t.value for t in JobTaskType}
+    assert _phases(assignments) == {"PLAN", "EXEC", "TEST", "REVIEW", "MERGE"}
     assert all(a.agent == AgentType.CLAUDE for a in assignments)
 
 

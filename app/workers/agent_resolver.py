@@ -45,9 +45,5 @@ _MODE_TABLE: dict[OrchestrationMode, list[AgentAssignment]] = {
 
 
 def resolve_assignments(mode: OrchestrationMode) -> list[AgentAssignment]:
-    """Return the agent assignment list for the given *mode*.
-
-    Falls back to ``SINGLE`` if *mode* is not found (should not happen
-    when using the enum).
-    """
-    return list(_MODE_TABLE.get(mode, _SINGLE))
+    """Return the agent assignment list for the given *mode*."""
+    return list(_MODE_TABLE[mode])

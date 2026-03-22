@@ -5,6 +5,8 @@ import contextlib
 from datetime import datetime
 from pathlib import Path
 
+import yaml
+
 from app.core.enums import JobEvent, JobState, JobTaskType, OrchestrationMode
 from app.infra.filesystem import write_json, write_text
 from app.infra.git_worktree import GitWorktreeManager
@@ -122,10 +124,14 @@ class QueueWorker:
         )
 
         # Agent assignment artifact
-        assignment_lines = [f"orchestration_mode: {orch_mode.value}\nassignments:\n"]
-        for a in assignments:
-            assignment_lines.append(f'  - phase: {a.phase}\n    agent: {a.agent}\n    role: "{a.role}"\n')
-        assign_path = write_text(plan_dir / "agent_assignments.yaml", "".join(assignment_lines))
+        assignment_data = {
+            "orchestration_mode": orch_mode.value,
+            "assignments": [{"phase": a.phase.value, "agent": a.agent.value, "role": a.role} for a in assignments],
+        }
+        assign_path = write_text(
+            plan_dir / "agent_assignments.yaml",
+            yaml.dump(assignment_data, default_flow_style=False, allow_unicode=True, sort_keys=False),
+        )
 
         for artifact in [plan_path, tasks_path, risks_path, tests_path, assign_path]:
             job = self._add_artifact(job, artifact)
