@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.core.enums import JobCommand, JobState, JobTaskType
+from app.core.enums import AgentType, JobCommand, JobState, JobTaskType, OrchestrationMode
 
 
 class JobCreatePayload(BaseModel):
@@ -28,6 +28,14 @@ class CommandEnvelope(BaseModel):
     trace_id: str
 
 
+class AgentAssignment(BaseModel):
+    """Maps a task phase to the AI agent that handles it."""
+
+    phase: JobTaskType
+    agent: AgentType
+    role: str
+
+
 class JobRecord(BaseModel):
     job_id: str
     repo: str
@@ -35,6 +43,7 @@ class JobRecord(BaseModel):
     goal: str
     acceptance_criteria: str
     mode: str
+    orchestration_mode: OrchestrationMode = OrchestrationMode.SINGLE
     priority: str = "normal"
     requested_by: str
     approved_by: str | None = None
@@ -49,6 +58,7 @@ class JobRecord(BaseModel):
     updated_at: datetime
     run_dir: str
     artifacts: list[str] = Field(default_factory=list)
+    agent_assignments: list[AgentAssignment] = Field(default_factory=list)
     notes: dict[str, str] = Field(default_factory=dict)
 
 

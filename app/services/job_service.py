@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from app.config import settings
-from app.core.enums import JobEvent, JobState, JobTaskType
+from app.core.enums import JobEvent, JobState, JobTaskType, OrchestrationMode
 from app.core.exceptions import AuthorizationError, ValidationError
 from app.infra.storage import FileJobStore
 from app.schemas.job import AuditEvent, JobCreatePayload, JobRecord, JobTask
@@ -72,6 +72,12 @@ class JobService:
         if not self.acl.is_repo_allowed(payload.repo):
             raise ValidationError("허용되지 않은 repo 입니다.")
 
+        # Resolve orchestration mode from the mode field
+        try:
+            orch_mode = OrchestrationMode(payload.mode)
+        except ValueError:
+            orch_mode = OrchestrationMode.SINGLE
+
         now = self._now()
         job_id = self._next_job_id()
         run_dir = str(settings.resolved_runs_dir / job_id)
@@ -82,6 +88,7 @@ class JobService:
             goal=payload.goal,
             acceptance_criteria=payload.ac,
             mode=payload.mode,
+            orchestration_mode=orch_mode,
             priority=payload.priority,
             requested_by=payload.requested_by,
             state=JobState.RECEIVED,
