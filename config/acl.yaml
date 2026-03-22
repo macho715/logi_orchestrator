@@ -1,0 +1,14 @@
+requesters:
+  - "mrcha"
+  - "admin"
+
+approvers:
+  - "mrcha"
+  - "admin"
+
+operators:
+  - "mrcha"
+  - "admin"
+
+repos:
+  - "macho715/logi_hvdc_dash"

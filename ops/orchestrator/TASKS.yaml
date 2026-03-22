@@ -1,0 +1,423 @@
+version: "1.0"
+project:
+  id: "HVDC-AGENT-ORCH-V1"
+  name: "Telegram-Claude-Codex-Orchestrator"
+  repo: "macho715/logi_hvdc_dash"
+  base_branch: "main"
+  timezone: "Asia/Dubai"
+  approval_gates:
+    - PLAN_APPROVAL
+    - MERGE_APPROVAL
+  concurrency:
+    default_slots: 7
+    burst_slots: 11
+    max_write_agents_per_worktree: 1
+  paths:
+    root: "ops/orchestrator"
+    runs: "ops/orchestrator/runs"
+    reports: "ops/orchestrator/reports"
+    audit: "ops/orchestrator/audit"
+
+roles:
+  requester:
+    can:
+      - project.start
+      - status
+      - report
+  approver:
+    can:
+      - approve.plan
+      - approve.merge
+      - pause
+      - resume
+      - abort
+  operator:
+    can:
+      - retry
+      - requeue
+      - unlock
+      - reroute
+
+agents:
+  - id: "CLAUDE_LEAD"
+    engine: "claude"
+    lane: "plan"
+    mode: "read-mostly"
+    parallel_limit: 1
+    outputs:
+      - "PLAN.md"
+      - "TASKS.yaml"
+      - "RISKS.md"
+      - "TESTS.md"
+
+  - id: "CLAUDE_ARCH"
+    engine: "claude"
+    lane: "design"
+    mode: "read-mostly"
+    parallel_limit: 1
+    outputs:
+      - "design_notes.md"
+      - "option_compare.md"
+
+  - id: "CLAUDE_REVIEW"
+    engine: "claude"
+    lane: "review"
+    mode: "read-mostly"
+    parallel_limit: 1
+    outputs:
+      - "review_summary.md"
+      - "merge_verdict.json"
+
+  - id: "CODEX_LEAD"
+    engine: "codex"
+    lane: "dispatch"
+    mode: "write"
+    parallel_limit: 1
+    outputs:
+      - "dispatch_plan.json"
+
+  - id: "CODEX_IMPL_A"
+    engine: "codex"
+    lane: "implementation"
+    mode: "write"
+    parallel_limit: 1
+    outputs:
+      - "patch_A.diff"
+      - "impl_A_notes.md"
+
+  - id: "CODEX_IMPL_B"
+    engine: "codex"
+    lane: "implementation"
+    mode: "write"
+    parallel_limit: 1
+    outputs:
+      - "patch_B.diff"
+      - "impl_B_notes.md"
+
+  - id: "CODEX_TEST"
+    engine: "codex"
+    lane: "test"
+    mode: "write"
+    parallel_limit: 1
+    outputs:
+      - "test_results.json"
+      - "smoke_report.md"
+
+  - id: "CODEX_CLOUD_1"
+    engine: "codex-cloud"
+    lane: "candidate"
+    mode: "write"
+    parallel_limit: 1
+    outputs:
+      - "candidate_1.diff"
+      - "candidate_1.md"
+
+policies:
+  global:
+    approval_before_write: true
+    approval_before_merge: true
+    retry_limit: 2
+    secret_masking: true
+    audit_required: true
+    dry_run_default: true
+  codex:
+    sandbox: "workspace-write"
+    approval_mode: "on-request"
+  git:
+    worktree_per_writer: true
+    rebase_before_merge: true
+    allow_direct_main_push: false
+
+artifacts:
+  required:
+    - "PLAN.md"
+    - "TASKS.yaml"
+    - "RISKS.md"
+    - "TESTS.md"
+    - "review_summary.md"
+    - "test_results.json"
+    - "final_report.md"
+  optional:
+    - "option_compare.md"
+    - "dispatch_plan.json"
+    - "candidate_1.diff"
+
+workflow:
+  phases:
+    - id: "P00"
+      name: "bootstrap"
+      tasks: ["T001", "T002", "T003"]
+    - id: "P10"
+      name: "plan"
+      tasks: ["T010", "T011", "T012"]
+    - id: "P20"
+      name: "approval_plan"
+      tasks: ["T020"]
+    - id: "P30"
+      name: "fanout_execute"
+      tasks: ["T030", "T031", "T032", "T033"]
+    - id: "P40"
+      name: "review_test"
+      tasks: ["T040", "T041", "T042"]
+    - id: "P50"
+      name: "approval_merge"
+      tasks: ["T050"]
+    - id: "P60"
+      name: "merge_report"
+      tasks: ["T060", "T061"]
+
+tasks:
+  - id: "T001"
+    title: "작업 디렉터리 및 run path 초기화"
+    owner: "CODEX_LEAD"
+    deps: []
+    gate: null
+    worktree: "none"
+    command_template: "mkdir -p ops/orchestrator/{runs,reports,audit}"
+    outputs:
+      - "ops/orchestrator/runs/.keep"
+      - "ops/orchestrator/reports/.keep"
+      - "ops/orchestrator/audit/.keep"
+    acceptance:
+      - "필수 디렉터리 3개 생성"
+      - "권한 오류 없음"
+
+  - id: "T002"
+    title: "Telegram 명령 allowlist 로드"
+    owner: "CODEX_LEAD"
+    deps: ["T001"]
+    gate: null
+    worktree: "none"
+    outputs:
+      - "config/acl.yaml"
+    acceptance:
+      - "requester/approver/operator 분리"
+      - "허용되지 않은 사용자 차단"
+
+  - id: "T003"
+    title: "job skeleton 생성"
+    owner: "CODEX_LEAD"
+    deps: ["T001"]
+    gate: null
+    worktree: "none"
+    outputs:
+      - "runs/JOB-XXXX/meta.json"
+      - "runs/JOB-XXXX/audit/events.jsonl"
+    acceptance:
+      - "JOB ID 발급"
+      - "초기 상태 RECEIVED 기록"
+
+  - id: "T010"
+    title: "Kickoff Plan 작성"
+    owner: "CLAUDE_LEAD"
+    deps: ["T003"]
+    gate: null
+    worktree: "read-only"
+    inputs:
+      - "goal"
+      - "acceptance_criteria"
+      - "repo_context"
+    outputs:
+      - "runs/JOB-XXXX/plan/PLAN.md"
+    acceptance:
+      - "목표/범위/성공기준 포함"
+      - "병렬 실행 정책 포함"
+
+  - id: "T011"
+    title: "Task graph 작성"
+    owner: "CLAUDE_LEAD"
+    deps: ["T010"]
+    gate: null
+    worktree: "read-only"
+    outputs:
+      - "runs/JOB-XXXX/plan/TASKS.yaml"
+    acceptance:
+      - "deps 명시"
+      - "owner 명시"
+      - "gate 명시"
+
+  - id: "T012"
+    title: "리스크 및 테스트 기준 작성"
+    owner: "CLAUDE_ARCH"
+    deps: ["T010"]
+    gate: null
+    worktree: "read-only"
+    outputs:
+      - "runs/JOB-XXXX/plan/RISKS.md"
+      - "runs/JOB-XXXX/plan/TESTS.md"
+    acceptance:
+      - "리스크 최소 5개"
+      - "테스트 종류 구분"
+
+  - id: "T020"
+    title: "Plan 승인 대기"
+    owner: "SYSTEM"
+    deps: ["T011", "T012"]
+    gate: "PLAN_APPROVAL"
+    worktree: "none"
+    outputs:
+      - "runs/JOB-XXXX/audit/approvals.jsonl"
+    acceptance:
+      - "approve.plan 수신"
+      - "승인자 기록"
+
+  - id: "T030"
+    title: "구현 worktree A 생성 및 task 배정"
+    owner: "CODEX_IMPL_A"
+    deps: ["T020"]
+    gate: null
+    worktree: "wt/JOB-XXXX-impl-a"
+    outputs:
+      - "runs/JOB-XXXX/codex/patch_A.diff"
+      - "runs/JOB-XXXX/codex/impl_A_notes.md"
+    acceptance:
+      - "기능 A 구현"
+      - "변경 파일 목록 명시"
+
+  - id: "T031"
+    title: "구현 worktree B 생성 및 task 배정"
+    owner: "CODEX_IMPL_B"
+    deps: ["T020"]
+    gate: null
+    worktree: "wt/JOB-XXXX-impl-b"
+    outputs:
+      - "runs/JOB-XXXX/codex/patch_B.diff"
+      - "runs/JOB-XXXX/codex/impl_B_notes.md"
+    acceptance:
+      - "기능 B 구현"
+      - "변경 파일 목록 명시"
+
+  - id: "T032"
+    title: "대안 구현 cloud attempt 실행"
+    owner: "CODEX_CLOUD_1"
+    deps: ["T020"]
+    gate: null
+    worktree: "cloud"
+    outputs:
+      - "runs/JOB-XXXX/codex/candidate_1.diff"
+      - "runs/JOB-XXXX/codex/candidate_1.md"
+    acceptance:
+      - "후보안 1개 생성"
+      - "tradeoff 명시"
+
+  - id: "T033"
+    title: "dispatch summary 작성"
+    owner: "CODEX_LEAD"
+    deps: ["T030", "T031", "T032"]
+    gate: null
+    worktree: "none"
+    outputs:
+      - "runs/JOB-XXXX/codex/dispatch_plan.json"
+    acceptance:
+      - "실행 task 결과 집계"
+      - "누락 artifact 없음"
+
+  - id: "T040"
+    title: "lint 및 unit test 실행"
+    owner: "CODEX_TEST"
+    deps: ["T030", "T031"]
+    gate: null
+    worktree: "wt/JOB-XXXX-test"
+    outputs:
+      - "runs/JOB-XXXX/tests/test_results.json"
+      - "runs/JOB-XXXX/tests/smoke_report.md"
+    acceptance:
+      - "exit code 기록"
+      - "실패 케이스 기록"
+
+  - id: "T041"
+    title: "diff summary 작성"
+    owner: "CLAUDE_REVIEW"
+    deps: ["T033", "T040"]
+    gate: null
+    worktree: "read-only"
+    outputs:
+      - "runs/JOB-XXXX/review/diff_summary.md"
+    acceptance:
+      - "변경 요약"
+      - "리스크 표시"
+
+  - id: "T042"
+    title: "최종 리뷰 및 merge verdict 작성"
+    owner: "CLAUDE_REVIEW"
+    deps: ["T041"]
+    gate: null
+    worktree: "read-only"
+    outputs:
+      - "runs/JOB-XXXX/review/review_summary.md"
+      - "runs/JOB-XXXX/review/merge_verdict.json"
+    acceptance:
+      - "PASS 또는 PASS_WITH_WARNINGS 또는 FAIL"
+      - "rollback 포인트 명시"
+
+  - id: "T050"
+    title: "Merge 승인 대기"
+    owner: "SYSTEM"
+    deps: ["T042"]
+    gate: "MERGE_APPROVAL"
+    worktree: "none"
+    outputs:
+      - "runs/JOB-XXXX/audit/approvals.jsonl"
+    acceptance:
+      - "approve.merge 수신"
+      - "승인자 기록"
+
+  - id: "T060"
+    title: "merge 또는 PR 생성"
+    owner: "CODEX_LEAD"
+    deps: ["T050"]
+    gate: null
+    worktree: "wt/JOB-XXXX-merge"
+    outputs:
+      - "runs/JOB-XXXX/reports/merge_result.json"
+    acceptance:
+      - "merge 성공 또는 PR 생성"
+      - "main direct push 금지"
+
+  - id: "T061"
+    title: "최종 보고서 작성 및 archive"
+    owner: "CLAUDE_REVIEW"
+    deps: ["T060"]
+    gate: null
+    worktree: "read-only"
+    outputs:
+      - "runs/JOB-XXXX/reports/final_report.md"
+      - "runs/JOB-XXXX/reports/final_report.json"
+    acceptance:
+      - "요청/승인/변경/테스트/리스크 포함"
+      - "DONE 상태 전환"
+
+report_schema:
+  final_report_json:
+    required_fields:
+      - job_id
+      - repo
+      - goal
+      - requester
+      - approver_plan
+      - approver_merge
+      - changed_files
+      - tests
+      - review_verdict
+      - rollback_point
+      - duration_seconds
+
+telegram_bindings:
+  project.start:
+    creates:
+      - "T001"
+      - "T002"
+      - "T003"
+      - "T010"
+      - "T011"
+      - "T012"
+  approve.plan:
+    unlocks:
+      - "T030"
+      - "T031"
+      - "T032"
+      - "T033"
+  approve.merge:
+    unlocks:
+      - "T060"
+      - "T061"
